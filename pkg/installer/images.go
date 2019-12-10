@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package images
+package installer
 
 import (
 	"fmt"
+	"github.com/n3wscott/rigging/pkg/images"
 	"strings"
 	"sync"
 )
@@ -26,7 +27,9 @@ var packages = []string(nil)
 var packageToImageConfig = map[string]string{}
 var packaged sync.Once
 
-func AddPackage(pack ...string) {
+// RegisterPackage registers an interest in producing an image based on the
+// provide package.
+func RegisterPackage(pack ...string) {
 	for _, p := range pack {
 		exists := false
 		for _, k := range packages {
@@ -47,7 +50,7 @@ func ProduceImages() (map[string]string, error) {
 	var propErr error
 	packaged.Do(func() {
 		for _, pack := range packages {
-			image, err := KoPublish(pack)
+			image, err := images.KoPublish(pack)
 			if err != nil {
 				fmt.Printf("error attempting to ko publish: %s\n", err)
 				propErr = err
@@ -56,7 +59,6 @@ func ProduceImages() (map[string]string, error) {
 			i := strings.Split(pack, "/")
 			packageToImageConfig[i[len(i)-1]] = image
 		}
-
 	})
 	return packageToImageConfig, propErr
 }

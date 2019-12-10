@@ -1,5 +1,5 @@
 /*
-Copyright 2019 Google LLC
+Copyright 2019 The Rigging Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package operations
+package lifecycle
 
 import (
 	"context"
@@ -26,17 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"knative.dev/pkg/logging"
-)
-
-type OpsJobStatus string
-
-const (
-	OpsJobGetFailed          OpsJobStatus = "JOB_GET_FAILED"
-	OpsJobCreated            OpsJobStatus = "JOB_CREATED"
-	OpsJobCreateFailed       OpsJobStatus = "JOB_CREATE_FAILED"
-	OpsJobCompleteSuccessful OpsJobStatus = "JOB_SUCCESSFUL"
-	OpsJobCompleteFailed     OpsJobStatus = "JOB_FAILED"
-	OpsJobOngoing            OpsJobStatus = "JOB_ONGOING"
 )
 
 func IsJobComplete(job *batchv1.Job) bool {

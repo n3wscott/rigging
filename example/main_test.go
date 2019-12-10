@@ -1,3 +1,5 @@
+// +build e2e
+
 /*
 Copyright 2019 The Rigging Authors
 
@@ -17,15 +19,15 @@ limitations under the License.
 package example
 
 import (
+	"github.com/n3wscott/rigging/pkg/installer"
 	"testing"
 
-	"github.com/n3wscott/rigging/pkg/images"
 	"knative.dev/pkg/test/logstream"
 )
 
 // This test is more for debugging the ko publish process.
 func TestKoPublish(t *testing.T) {
-	ic, err := images.ProduceImages()
+	ic, err := installer.ProduceImages()
 	if err != nil {
 		t.Fatalf("failed to produce images, %s", err)
 	}

@@ -18,12 +18,14 @@ package installer
 
 import (
 	"fmt"
+	"github.com/n3wscott/rigging/pkg/lifecycle"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 	"text/template"
 
 	yaml "github.com/jcrossley3/manifestival/pkg/manifestival"
@@ -31,11 +33,22 @@ import (
 )
 
 // NewInstaller wll create and return a new installer based on the dynamic client.
-func NewInstaller(dc dynamic.Interface, config map[string]interface{}, paths ...string) *Installer {
+func NewInstaller(t *testing.T, config map[string]interface{}, paths ...string) (*Installer, error) {
 	if len(paths) == 0 || (len(paths) == 1 && paths[0] == "") {
 		// default to ko path:
 		paths[0] = "/var/run/ko/install"
 	}
+
+	client := lifecycle.Setup(t, true)
+	config["namespace"] = client.Namespace
+	dc := client.Dynamic
+
+	// Make the images.
+	ic, err := ProduceImages()
+	if err != nil {
+		return nil, err
+	}
+	config["images"] = ic
 
 	for i, p := range paths {
 		paths[i] = ParseTemplates(p, config)
@@ -46,7 +59,12 @@ func NewInstaller(dc dynamic.Interface, config map[string]interface{}, paths ...
 	if err != nil {
 		panic(err)
 	}
-	return &Installer{dc: dc, manifest: manifest}
+
+	return &Installer{
+		dc:       dc,
+		manifest: manifest,
+		Client:   *client,
+	}, nil
 }
 
 // YamlPathsOptionFunc allows for bulk mutation of the yaml paths.
@@ -107,8 +125,8 @@ func ParseTemplates(path string, config map[string]interface{}) string {
 }
 
 type Installer struct {
-	dc dynamic.Interface
-
+	lifecycle.Client
+	dc       dynamic.Interface
 	manifest yaml.Manifest
 }
 

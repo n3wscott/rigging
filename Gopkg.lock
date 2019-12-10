@@ -96,14 +96,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:0e52bfccbcce726774c35a057aa1928724fe533c8a3bb6f5f09c6d7112cb5f3e"
-  name = "github.com/google/knative-gcp"
-  packages = ["pkg/operations"]
-  pruneopts = "NUT"
-  revision = "ffa40ef2ae1b615b275f8dd3e8b7056b0759e3c7"
-  version = "v0.10.1"
-
-[[projects]]
   branch = "master"
   digest = "1:1daf56dfb4e2c310fd5af3073c0d08e304c116fe65596e52f8edc46d19ccd17b"
   name = "github.com/google/licenseclassifier"
@@ -861,19 +853,21 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/google/knative-gcp/pkg/operations",
     "github.com/jcrossley3/manifestival/pkg/manifestival",
     "github.com/kelseyhightower/envconfig",
     "go.opencensus.io/metric/metricexport",
     "golang.org/x/net/http2/h2c",
+    "k8s.io/api/batch/v1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/util/sets/types",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/dynamic",
+    "k8s.io/client-go/kubernetes",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
     "k8s.io/code-generator/cmd/defaulter-gen",
@@ -882,6 +876,7 @@
     "knative.dev/pkg/apis",
     "knative.dev/pkg/apis/duck/v1",
     "knative.dev/pkg/codegen/cmd/injection-gen",
+    "knative.dev/pkg/logging",
     "knative.dev/pkg/test",
     "knative.dev/pkg/test/helpers",
     "knative.dev/pkg/test/logstream",

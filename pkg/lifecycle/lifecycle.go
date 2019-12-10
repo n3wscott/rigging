@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/knative-gcp/pkg/operations"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,10 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
+
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
-	"knative.dev/pkg/test"
-	pkgTest "knative.dev/pkg/test"
+	kntest "knative.dev/pkg/test"
 	"knative.dev/pkg/test/helpers"
 )
 
@@ -50,8 +49,8 @@ func Setup(t *testing.T, runInParallel bool) *Client {
 	namespace := helpers.MakeK8sNamePrefix(baseName)
 	t.Logf("namespace is : %q", namespace)
 	client, err := NewClient(
-		pkgTest.Flags.Kubeconfig,
-		pkgTest.Flags.Cluster,
+		kntest.Flags.Kubeconfig,
+		kntest.Flags.Cluster,
 		namespace,
 		t)
 	if err != nil {
@@ -59,7 +58,7 @@ func Setup(t *testing.T, runInParallel bool) *Client {
 	}
 
 	client.CreateNamespaceIfNeeded(t)
-	//client.DuplicateSecret(t, "google-cloud-key", "default") // TODO
+	//client.DuplicateSecret(t, "google-cloud-key", "default") // TODO: ensure secrets in a namespace...
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -94,7 +93,7 @@ func DeleteNameSpace(client *Client) error {
 
 // Client holds instances of interfaces for making requests to Knative.
 type Client struct {
-	Kube    *test.KubeClient
+	Kube    *kntest.KubeClient
 	Dynamic dynamic.Interface
 
 	Namespace string
@@ -105,11 +104,11 @@ type Client struct {
 // cluster specified by the combination of clusterName and configPath.
 func NewClient(configPath string, clusterName string, namespace string, t *testing.T) (*Client, error) {
 	client := &Client{}
-	cfg, err := test.BuildClientConfig(configPath, clusterName)
+	cfg, err := kntest.BuildClientConfig(configPath, clusterName)
 	if err != nil {
 		return nil, err
 	}
-	client.Kube, err = test.NewKubeClient(configPath, clusterName)
+	client.Kube, err = kntest.NewKubeClient(configPath, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -217,18 +216,18 @@ func (c *Client) WaitForResourceReady(namespace, name string, gvr schema.GroupVe
 }
 
 // WaitForResourceReady waits until the specified resource in the given namespace are ready.
-func (c *Client) WaitUntilJobDone(namespace, name string) (string, error) {
+func (c *Client) WaitUntilJobDone(name string) (string, error) {
 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-		job, err := c.Kube.Kube.BatchV1().Jobs(namespace).Get(name, metav1.GetOptions{})
+		job, err := c.Kube.Kube.BatchV1().Jobs(c.Namespace).Get(name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Println(namespace, name, "not found", err)
+				log.Println(c.Namespace, name, "not found", err)
 				// keep polling
 				return false, nil
 			}
 			return false, err
 		}
-		return operations.IsJobComplete(job), nil
+		return IsJobComplete(job), nil
 	})
 	if err != nil {
 		return "", err
@@ -236,10 +235,10 @@ func (c *Client) WaitUntilJobDone(namespace, name string) (string, error) {
 
 	// poll until the pod is terminated.
 	err = wait.PollImmediate(interval, timeout, func() (bool, error) {
-		pod, err := operations.GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
+		pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, c.Namespace, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Println(namespace, name, "not found", err)
+				log.Println(c.Namespace, name, "not found", err)
 				// keep polling
 				return false, nil
 			}
@@ -258,11 +257,11 @@ func (c *Client) WaitUntilJobDone(namespace, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pod, err := operations.GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
+	pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, c.Namespace, name)
 	if err != nil {
 		return "", err
 	}
-	return operations.GetFirstTerminationMessage(pod), nil
+	return GetFirstTerminationMessage(pod), nil
 }
 
 func (c *Client) LogsFor(namespace, name string, gvr schema.GroupVersionResource) (string, error) {

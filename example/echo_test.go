@@ -18,37 +18,30 @@ package example
 
 import (
 	"encoding/json"
-	"github.com/n3wscott/rigging/pkg/images"
-	"github.com/n3wscott/rigging/pkg/runner"
 	"testing"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/n3wscott/rigging/pkg/installer"
-	"github.com/n3wscott/rigging/pkg/lifecycle"
+	"github.com/n3wscott/rigging/pkg/runner"
 )
 
 func init() {
-	images.AddPackage("github.com/n3wscott/rigging/example/cmd/echo")
+	installer.RegisterPackage("github.com/n3wscott/rigging/example/cmd/echo")
 }
 
 // EchoTestImpl a very simple example test implementation.
 func EchoTestImpl(t *testing.T) {
-	ic, err := images.ProduceImages()
-	if err != nil {
-		t.Fatalf("failed to produce images, %s", err)
-	}
-
-	client := lifecycle.Setup(t, true)
-	defer lifecycle.TearDown(client)
 
 	cfg := make(map[string]interface{})
-	cfg["namespace"] = client.Namespace
 	cfg["echo"] = "hello world"
-	cfg["images"] = ic
 
-	i := installer.NewInstaller(client.Dynamic, cfg, installer.EndToEndConfigYaml([]string{"echo"})...)
+	i, err := installer.NewInstaller(t, cfg, installer.EndToEndConfigYaml([]string{"echo"})...)
+	if err != nil {
+		t.Errorf("failed to create installer, %s", err)
+		return
+	}
 
 	// Create the resources for the test.
 	if err := i.Setup(); err != nil {
@@ -71,7 +64,7 @@ func EchoTestImpl(t *testing.T) {
 		Resource: "jobs",
 	}
 
-	msg, err := client.WaitUntilJobDone(client.Namespace, "echo")
+	msg, err := i.WaitUntilJobDone("echo")
 	if err != nil {
 		t.Error(err)
 		return
@@ -86,7 +79,7 @@ func EchoTestImpl(t *testing.T) {
 			return
 		}
 		if !out.Success {
-			if logs, err := client.LogsFor(client.Namespace, "echo", jobGVR); err != nil {
+			if logs, err := i.LogsFor(i.Namespace, "echo", jobGVR); err != nil {
 				t.Error(err)
 			} else {
 				t.Logf("job: %s\n", logs)
