@@ -20,10 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -38,71 +35,19 @@ import (
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	kntest "knative.dev/pkg/test"
-	"knative.dev/pkg/test/helpers"
 )
 
-// Setup creates the client objects needed in the e2e tests,
-// and does other setups, like creating namespaces, set the test case to run in parallel, etc.
-func Setup(t *testing.T, runInParallel bool) *Client {
-	// Create a new namespace to run this test case.
-	baseName := helpers.AppendRandomString(helpers.GetBaseFuncName(t.Name()))
-	namespace := helpers.MakeK8sNamePrefix(baseName)
-	t.Logf("namespace is : %q", namespace)
-	client, err := NewClient(
-		kntest.Flags.Kubeconfig,
-		kntest.Flags.Cluster,
-		namespace,
-		t)
-	if err != nil {
-		t.Fatalf("Couldn't initialize clients: %v", err)
-	}
-
-	client.CreateNamespaceIfNeeded(t)
-	//client.DuplicateSecret(t, "google-cloud-key", "default") // TODO: ensure secrets in a namespace...
-
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		fmt.Printf("Test %q running, please don't interrupt...\n", t.Name())
-	}()
-
-	// Run the test case in parallel if needed.
-	if runInParallel {
-		t.Parallel()
-	}
-
-	return client
-}
-
-// TearDown will delete created names using clients.
-func TearDown(client *Client) {
-	if err := DeleteNameSpace(client); err != nil {
-		client.T.Logf("Could not delete the namespace %q: %v", client.Namespace, err)
-	}
-}
-
-// DeleteNameSpace deletes the namespace that has the given name.
-func DeleteNameSpace(client *Client) error {
-	_, err := client.Kube.Kube.CoreV1().Namespaces().Get(client.Namespace, metav1.GetOptions{})
-	if err == nil || !apierrors.IsNotFound(err) {
-		return client.Kube.Kube.CoreV1().Namespaces().Delete(client.Namespace, nil)
-	}
-	return err
-}
-
-// Client holds instances of interfaces for making requests to Knative.
+// Client holds instances of interfaces for making requests to Kubernetes.
 type Client struct {
-	Kube    *kntest.KubeClient
-	Dynamic dynamic.Interface
-
-	Namespace string
-	T         *testing.T
+	Kube             *kntest.KubeClient
+	Dynamic          dynamic.Interface
+	Namespace        string
+	namespaceCreated bool
 }
 
 // NewClient instantiates and returns clientsets required for making request to the
 // cluster specified by the combination of clusterName and configPath.
-func NewClient(configPath string, clusterName string, namespace string, t *testing.T) (*Client, error) {
+func NewClient(configPath string, clusterName string, namespace string) (*Client, error) {
 	client := &Client{}
 	cfg, err := kntest.BuildClientConfig(configPath, clusterName)
 	if err != nil {
@@ -119,12 +64,12 @@ func NewClient(configPath string, clusterName string, namespace string, t *testi
 	}
 
 	client.Namespace = namespace
-	client.T = t
+	client.namespaceCreated = true
 	return client, nil
 }
 
 // CreateNamespaceIfNeeded creates a new namespace if it does not exist.
-func (c *Client) CreateNamespaceIfNeeded(t *testing.T) {
+func (c *Client) CreateNamespaceIfNeeded() error {
 	nsSpec, err := c.Kube.Kube.CoreV1().Namespaces().Get(c.Namespace, metav1.GetOptions{})
 
 	if err != nil && apierrors.IsNotFound(err) {
@@ -132,16 +77,28 @@ func (c *Client) CreateNamespaceIfNeeded(t *testing.T) {
 		nsSpec, err = c.Kube.Kube.CoreV1().Namespaces().Create(nsSpec)
 
 		if err != nil {
-			t.Fatalf("Failed to create Namespace: %s; %v", c.Namespace, err)
+			return fmt.Errorf("Failed to create Namespace: %s; %v", c.Namespace, err)
 		}
 
 		// https://github.com/kubernetes/kubernetes/issues/66689
 		// We can only start creating pods after the default ServiceAccount is created by the kube-controller-manager.
-		err = waitForServiceAccountExists(t, c, "default", c.Namespace)
+		err = waitForServiceAccountExists(c, "default", c.Namespace)
 		if err != nil {
-			t.Fatalf("The default ServiceAccount was not created for the Namespace: %s", c.Namespace)
+			return fmt.Errorf("The default ServiceAccount was not created for the Namespace: %s", c.Namespace)
 		}
 	}
+	return nil
+}
+
+func (c *Client) DeleteNamespaceIfNeeded() error {
+	if c.namespaceCreated {
+		_, err := c.Kube.Kube.CoreV1().Namespaces().Get(c.Namespace, metav1.GetOptions{})
+		if err == nil || !apierrors.IsNotFound(err) {
+			return c.Kube.Kube.CoreV1().Namespaces().Delete(c.Namespace, nil)
+		}
+		return err
+	}
+	return nil
 }
 
 // DuplicateSecret duplicates a secret from a namespace to a new namespace.
@@ -170,7 +127,7 @@ const (
 )
 
 // waitForServiceAccountExists waits until the ServiceAccount exists.
-func waitForServiceAccountExists(t *testing.T, client *Client, name, namespace string) error {
+func waitForServiceAccountExists(client *Client, name, namespace string) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
 		sas := client.Kube.Kube.CoreV1().ServiceAccounts(namespace)
 		if _, err := sas.Get(name, metav1.GetOptions{}); err == nil {

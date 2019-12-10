@@ -25,47 +25,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"testing"
 	"text/template"
 
 	yaml "github.com/jcrossley3/manifestival/pkg/manifestival"
 	"k8s.io/client-go/dynamic"
 )
-
-// NewInstaller wll create and return a new installer based on the dynamic client.
-func NewInstaller(t *testing.T, config map[string]interface{}, paths ...string) (*Installer, error) {
-	if len(paths) == 0 || (len(paths) == 1 && paths[0] == "") {
-		// default to ko path:
-		paths[0] = "/var/run/ko/install"
-	}
-
-	client := lifecycle.Setup(t, true)
-	config["namespace"] = client.Namespace
-	dc := client.Dynamic
-
-	// Make the images.
-	ic, err := ProduceImages()
-	if err != nil {
-		return nil, err
-	}
-	config["images"] = ic
-
-	for i, p := range paths {
-		paths[i] = ParseTemplates(p, config)
-	}
-	path := strings.Join(paths, ",")
-
-	manifest, err := yaml.NewYamlManifest(path, true, dc)
-	if err != nil {
-		panic(err)
-	}
-
-	return &Installer{
-		dc:       dc,
-		manifest: manifest,
-		Client:   *client,
-	}, nil
-}
 
 // YamlPathsOptionFunc allows for bulk mutation of the yaml paths.
 type YamlPathsOptionFunc func([]string) []string
