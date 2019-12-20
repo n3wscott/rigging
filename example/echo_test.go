@@ -18,42 +18,20 @@ package example
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/n3wscott/rigging"
-	"github.com/n3wscott/rigging/pkg/installer"
 	"github.com/n3wscott/rigging/pkg/runner"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"regexp"
 	"testing"
 	"time"
 )
 
 func init() {
-	installer.RegisterPackage("github.com/n3wscott/rigging/example/cmd/echo")
-}
-
-func TestParse(t *testing.T) {
-	s := "rigging-mekmiegt/echo (batch/v1, Kind=Job)"
-	matches := regexp.MustCompile(`\[(.*?)\]`).FindAllStringSubmatch(s, -1)
-	if matches == nil {
-		fmt.Println("No matches found.")
-		return
-	}
-
-	for i, match := range matches {
-		full := match[0]
-		submatches := match[1:len(match)]
-		fmt.Printf("%v => \"%v\" from \"%v\"\n", i, submatches[0], full)
-	}
+	rigging.RegisterPackage("github.com/n3wscott/rigging/example/cmd/echo")
 }
 
 // EchoTestImpl a very simple example test implementation.
 func EchoTestImpl(t *testing.T) {
-	opts := []rigging.Option{
-		rigging.WithImages(map[string]string{
-			"echo": "n3wscott.azurecr.io/echo-b301ec929b6c030bb4dd170136bb2fb3@sha256:ab79d01c4478302f21fd08071c6d78fbe5a0096ae017860ab382f51f327b73d5",
-		}),
-	}
+	opts := []rigging.Option{}
 
 	rig, err := rigging.NewInstall(opts, []string{"echo"}, map[string]string{"echo": "hello world"})
 	if err != nil {
@@ -73,8 +51,7 @@ func EchoTestImpl(t *testing.T) {
 	for _, r := range refs {
 		k := r.GroupVersionKind()
 		gvk, _ := meta.UnsafeGuessKindToResource(k)
-		t.Log("UnsafeGuessKindToResource:")
-		t.Log(gvk)
+		t.Log(k, "--> UnsafeGuessKindToResource:", gvk)
 
 		msg, err := rig.WaitForReadyOrDone(r, 45*time.Second)
 		if err != nil {
@@ -85,18 +62,21 @@ func EchoTestImpl(t *testing.T) {
 			return
 		} else {
 			out := &runner.Output{}
+
+			t.Log("Got message from resource:", msg)
+
 			if err := json.Unmarshal([]byte(msg), out); err != nil {
 				t.Error(err)
 				return
 			}
-			//if !out.Success {
-			//	if logs, err := i.LogsFor(i.Namespace, r.Name, gvk); err != nil {
-			//		t.Error(err)
-			//	} else {
-			//		t.Logf("job: %s\n", logs)
-			//	}
-			//	return
-			//}
+			if !out.Success {
+				if logs, err := rig.LogsFor(r); err != nil {
+					t.Error(err)
+				} else {
+					t.Fatalf("failed with: %s\n", logs)
+				}
+				return
+			}
 		}
 	}
 }

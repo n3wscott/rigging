@@ -27,6 +27,10 @@ type Rigging interface {
 	Namespace() string
 }
 
+// RegisterPackage registers an interest in producing an image based on the
+// provide package.
+var RegisterPackage = installer.RegisterPackage
+
 type Option func(Rigging) error
 
 func New(opts ...Option) (Rigging, error) {
