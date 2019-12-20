@@ -3,18 +3,19 @@ package rigging
 import (
 	"errors"
 	"fmt"
-	"github.com/n3wscott/rigging/pkg/installer"
-	"github.com/n3wscott/rigging/pkg/lifecycle"
-	yaml "github.com/n3wscott/rigging/pkg/manifestival"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	kntest "knative.dev/pkg/test"
-	"knative.dev/pkg/test/helpers"
 	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/n3wscott/rigging/pkg/installer"
+	"github.com/n3wscott/rigging/pkg/lifecycle"
+	yaml "github.com/n3wscott/rigging/pkg/manifest"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	kntest "knative.dev/pkg/test"
+	"knative.dev/pkg/test/helpers"
 )
 
 type Rigging interface {
@@ -22,6 +23,7 @@ type Rigging interface {
 	Uninstall() error
 	Objects() []v1.ObjectReference
 	WaitForReadyOrDone(ref v1.ObjectReference, timeout time.Duration) (string, error)
+	LogsFor(ref v1.ObjectReference) (string, error)
 	Namespace() string
 }
 
@@ -224,7 +226,6 @@ func (r *riggingImpl) yamlDirs(dirs []string) []string {
 
 // Uninstall implements Rigging.Uninstall
 func (r *riggingImpl) Uninstall() error {
-
 	// X. Delete yaml.
 	if err := r.manifest.DeleteAll(); err != nil {
 		return err
@@ -232,6 +233,8 @@ func (r *riggingImpl) Uninstall() error {
 
 	// Just chill for tick.
 	time.Sleep(5 * time.Second)
+
+	// TODO: wait for resources to be finished deleting...
 
 	// Y. Delete namespace.
 	if err := r.client.DeleteNamespaceIfNeeded(); err != nil {
@@ -251,7 +254,6 @@ func (r *riggingImpl) Namespace() string {
 }
 
 func (r *riggingImpl) WaitForReadyOrDone(ref v1.ObjectReference, timeout time.Duration) (string, error) {
-
 	k := ref.GroupVersionKind()
 	gvk, _ := meta.UnsafeGuessKindToResource(k)
 
@@ -271,4 +273,11 @@ func (r *riggingImpl) WaitForReadyOrDone(ref v1.ObjectReference, timeout time.Du
 	}
 
 	return "", nil
+}
+
+func (r *riggingImpl) LogsFor(ref v1.ObjectReference) (string, error) {
+	k := ref.GroupVersionKind()
+	gvk, _ := meta.UnsafeGuessKindToResource(k)
+
+	return r.client.LogsFor(ref.Namespace, ref.Name, gvk)
 }

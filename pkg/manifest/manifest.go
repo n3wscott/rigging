@@ -1,11 +1,29 @@
+/*
+Copyright 2019 The Rigging Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package manifestival
 
 import (
 	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
@@ -20,16 +38,16 @@ type Manifest interface {
 	DeleteAll() error
 	// Deletes a particular resource
 	Delete(spec *unstructured.Unstructured) error
-	// Retains every resource for which all FilterFn's return true
-	Filter(fns ...FilterFn) Manifest
 	// Returns a deep copy of the matching resource read from the file
 	Find(apiVersion string, kind string, name string) *unstructured.Unstructured
 	// Returns the resource fetched from the api server, nil if not found
 	Get(spec *unstructured.Unstructured) (*unstructured.Unstructured, error)
 	// Returns a deep copy of all resources in the manifest
 	DeepCopyResources() []unstructured.Unstructured
-	// Convenient list of all the resource names in the manifest
+	// ResourceNames is a convenient list of all the resource names in the manifest
 	ResourceNames() []string
+	// References is a convenient list of all resources in the manifest as object references
+	References() []corev1.ObjectReference
 }
 
 type YamlManifest struct {
@@ -102,7 +120,7 @@ func (f *YamlManifest) Delete(spec *unstructured.Unstructured) error {
 	if current == nil && err == nil {
 		return nil
 	}
-	klog.Info("Deleting", "type", spec.GroupVersionKind(), "name", spec.GetName())
+	klog.Info("Deleting ", "type ", spec.GroupVersionKind(), "name ", spec.GetName())
 	gvr, _ := meta.UnsafeGuessKindToResource(spec.GroupVersionKind())
 	if err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Delete(spec.GetName(), &v1.DeleteOptions{}); err != nil {
 		// ignore GC race conditions triggered by owner references
@@ -150,6 +168,22 @@ func (f *YamlManifest) ResourceNames() []string {
 		names = append(names, fmt.Sprintf("%s/%s (%s)", spec.GetNamespace(), spec.GetName(), spec.GroupVersionKind()))
 	}
 	return names
+}
+
+func (f *YamlManifest) References() []corev1.ObjectReference {
+	var refs []corev1.ObjectReference
+	for _, spec := range f.resources {
+
+		ref := corev1.ObjectReference{
+			Name:       spec.GetName(),
+			Namespace:  spec.GetNamespace(),
+			APIVersion: spec.GetAPIVersion(),
+			Kind:       spec.GetKind(),
+		}
+
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 // We need to preserve the top-level target keys, specifically
