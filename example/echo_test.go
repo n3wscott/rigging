@@ -18,73 +18,85 @@ package example
 
 import (
 	"encoding/json"
-	"testing"
-	"time"
-
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
+	"fmt"
+	"github.com/n3wscott/rigging"
 	"github.com/n3wscott/rigging/pkg/installer"
 	"github.com/n3wscott/rigging/pkg/runner"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"regexp"
+	"testing"
+	"time"
 )
 
 func init() {
 	installer.RegisterPackage("github.com/n3wscott/rigging/example/cmd/echo")
 }
 
+func TestParse(t *testing.T) {
+	s := "rigging-mekmiegt/echo (batch/v1, Kind=Job)"
+	matches := regexp.MustCompile(`\[(.*?)\]`).FindAllStringSubmatch(s, -1)
+	if matches == nil {
+		fmt.Println("No matches found.")
+		return
+	}
+
+	for i, match := range matches {
+		full := match[0]
+		submatches := match[1:len(match)]
+		fmt.Printf("%v => \"%v\" from \"%v\"\n", i, submatches[0], full)
+	}
+}
+
 // EchoTestImpl a very simple example test implementation.
 func EchoTestImpl(t *testing.T) {
+	opts := []rigging.Option{
+		rigging.WithImages(map[string]string{
+			"echo": "n3wscott.azurecr.io/echo-b301ec929b6c030bb4dd170136bb2fb3@sha256:ab79d01c4478302f21fd08071c6d78fbe5a0096ae017860ab382f51f327b73d5",
+		}),
+	}
 
-	cfg := make(map[string]interface{})
-	cfg["echo"] = "hello world"
-
-	i, err := installer.NewInstaller(t, cfg, installer.EndToEndConfigYaml([]string{"echo"})...)
+	rig, err := rigging.NewInstall(opts, []string{"echo"}, map[string]string{"echo": "hello world"})
 	if err != nil {
-		t.Errorf("failed to create installer, %s", err)
-		return
+		t.Fatalf("failed to create rig, %s", err)
 	}
 
-	// Create the resources for the test.
-	if err := i.Setup(); err != nil {
-		t.Errorf("failed to create, %s", err)
-		return
-	}
+	t.Logf("Created a new testing rig at namespace %s.", rig.Namespace())
 
-	// Teardown deferred.
+	// Uninstall deferred.
 	defer func() {
-		if err := i.Teardown(); err != nil {
-			t.Errorf("failed to create, %s", err)
+		if err := rig.Uninstall(); err != nil {
+			t.Errorf("failed to uninstall, %s", err)
 		}
-		// Just chill for tick.
-		time.Sleep(10 * time.Second)
 	}()
 
-	jobGVR := schema.GroupVersionResource{
-		Group:    "batch",
-		Version:  "v1",
-		Resource: "jobs",
-	}
+	refs := rig.Objects()
+	for _, r := range refs {
+		k := r.GroupVersionKind()
+		gvk, _ := meta.UnsafeGuessKindToResource(k)
+		t.Log("UnsafeGuessKindToResource:")
+		t.Log(gvk)
 
-	msg, err := i.WaitUntilJobDone("echo")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if msg == "" {
-		t.Error("No terminating message from the pod")
-		return
-	} else {
-		out := &runner.Output{}
-		if err := json.Unmarshal([]byte(msg), out); err != nil {
-			t.Error(err)
-			return
+		msg, err := rig.WaitForReadyOrDone(r, 45*time.Second)
+		if err != nil {
+			t.Fatalf("failed to wait for ready or done, %s", err)
 		}
-		if !out.Success {
-			if logs, err := i.LogsFor(i.Namespace, "echo", jobGVR); err != nil {
-				t.Error(err)
-			} else {
-				t.Logf("job: %s\n", logs)
-			}
+		if msg == "" {
+			t.Error("No terminating message from the pod")
 			return
+		} else {
+			out := &runner.Output{}
+			if err := json.Unmarshal([]byte(msg), out); err != nil {
+				t.Error(err)
+				return
+			}
+			//if !out.Success {
+			//	if logs, err := i.LogsFor(i.Namespace, r.Name, gvk); err != nil {
+			//		t.Error(err)
+			//	} else {
+			//		t.Logf("job: %s\n", logs)
+			//	}
+			//	return
+			//}
 		}
 	}
 }

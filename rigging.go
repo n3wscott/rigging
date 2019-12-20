@@ -3,21 +3,25 @@ package rigging
 import (
 	"errors"
 	"fmt"
-	yaml "github.com/jcrossley3/manifestival/pkg/manifestival"
 	"github.com/n3wscott/rigging/pkg/installer"
 	"github.com/n3wscott/rigging/pkg/lifecycle"
+	yaml "github.com/n3wscott/rigging/pkg/manifestival"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	kntest "knative.dev/pkg/test"
 	"knative.dev/pkg/test/helpers"
+	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 type Rigging interface {
-	Install(config map[string]string, files ...string) error
+	Install(dirs []string, config map[string]string) error
 	Uninstall() error
 	Objects() []v1.ObjectReference
+	WaitForReadyOrDone(ref v1.ObjectReference, timeout time.Duration) (string, error)
 	Namespace() string
 }
 
@@ -37,7 +41,7 @@ func New(opts ...Option) (Rigging, error) {
 
 	// Set other defaults if not set.
 	if r.rootDir == "" {
-		_, filename, _, _ := runtime.Caller(1)
+		_, filename, _, _ := runtime.Caller(2)
 		r.rootDir = filepath.Dir(filename)
 	}
 	if r.name == "" {
@@ -45,6 +49,19 @@ func New(opts ...Option) (Rigging, error) {
 	}
 
 	return r, nil
+}
+
+func NewInstall(opts []Option, dirs []string, config map[string]string) (Rigging, error) {
+	rig, err := New(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := rig.Install(dirs, config); err != nil {
+		return rig, err
+	}
+
+	return rig, err
 }
 
 const (
@@ -82,12 +99,23 @@ func WithRootDir(dir string) Option {
 	}
 }
 
+func WithImages(images map[string]string) Option {
+	return func(r Rigging) error {
+		if ri, ok := r.(*riggingImpl); ok {
+			ri.images = images
+			return nil
+		}
+		return errors.New("unknown rigging implementation")
+	}
+}
+
 type riggingImpl struct {
 	configDirTemplate string
 	rootDir           string
 	runInParallel     bool
 	namespace         string
 	name              string
+	images            map[string]string
 
 	client   *lifecycle.Client
 	manifest yaml.Manifest
@@ -100,7 +128,7 @@ type riggingImpl struct {
 //  3. Pass the yaml config through the templating system.
 //  4. Apply the yaml config to the cluster.
 //
-func (r *riggingImpl) Install(config map[string]string, name ...string) error {
+func (r *riggingImpl) Install(dirs []string, config map[string]string) error {
 
 	// 1. Create testing client and testing namespace.
 
@@ -117,11 +145,29 @@ func (r *riggingImpl) Install(config map[string]string, name ...string) error {
 
 	// 3. Pass the yaml config through the templating system.
 
-	_ = cfg
+	yamls := r.yamlDirs(dirs)
+
+	for i, p := range yamls {
+		yamls[i] = installer.ParseTemplates(p, cfg)
+	}
+	path := strings.Join(yamls, ",")
+
+	manifest, err := yaml.NewYamlManifest(path, true, r.client.Dynamic)
+	if err != nil {
+		return err
+	}
+	r.manifest = manifest
 
 	// 4. Apply yaml.
 	if err := r.manifest.ApplyAll(); err != nil {
 		return err
+	}
+
+	// Temp
+	refs := r.manifest.References()
+	log.Println("Created:")
+	for _, ref := range refs {
+		log.Println(ref)
 	}
 
 	return nil
@@ -149,9 +195,12 @@ func (r *riggingImpl) createEnvironment() error {
 }
 
 func (r *riggingImpl) updateConfig(config map[string]string) (map[string]interface{}, error) {
-	ic, err := installer.ProduceImages()
-	if err != nil {
-		return nil, err
+	if r.images == nil {
+		ic, err := installer.ProduceImages()
+		if err != nil {
+			return nil, err
+		}
+		r.images = ic
 	}
 
 	cfg := make(map[string]interface{})
@@ -159,9 +208,18 @@ func (r *riggingImpl) updateConfig(config map[string]string) (map[string]interfa
 		cfg[k] = v
 	}
 	// Implement template contract for Rigging:
-	cfg["images"] = ic
+	cfg["images"] = r.images
 	cfg["namespace"] = r.Namespace()
 	return cfg, nil
+}
+
+func (r *riggingImpl) yamlDirs(dirs []string) []string {
+	yamls := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		yamls = append(yamls, fmt.Sprintf(r.configDirTemplate, r.rootDir, d))
+	}
+
+	return yamls
 }
 
 // Uninstall implements Rigging.Uninstall
@@ -172,6 +230,9 @@ func (r *riggingImpl) Uninstall() error {
 		return err
 	}
 
+	// Just chill for tick.
+	time.Sleep(5 * time.Second)
+
 	// Y. Delete namespace.
 	if err := r.client.DeleteNamespaceIfNeeded(); err != nil {
 		return err
@@ -181,10 +242,33 @@ func (r *riggingImpl) Uninstall() error {
 
 // Objects implements Rigging.Objects
 func (r *riggingImpl) Objects() []v1.ObjectReference {
-	return nil
+	return r.manifest.References()
 }
 
 // Namespace implements Rigging.Namespace
 func (r *riggingImpl) Namespace() string {
 	return r.namespace
+}
+
+func (r *riggingImpl) WaitForReadyOrDone(ref v1.ObjectReference, timeout time.Duration) (string, error) {
+
+	k := ref.GroupVersionKind()
+	gvk, _ := meta.UnsafeGuessKindToResource(k)
+
+	switch gvk.Resource {
+	case "jobs":
+		out, err := r.client.WaitUntilJobDone(ref.Namespace, ref.Name, timeout)
+		if err != nil {
+			return "", err
+		}
+		return out, nil
+
+	default:
+		err := r.client.WaitForResourceReady(ref.Namespace, ref.Name, gvk, timeout)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return "", nil
 }

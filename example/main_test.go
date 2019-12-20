@@ -1,4 +1,4 @@
-// +build e2e
+// build e2e
 
 /*
 Copyright 2019 The Rigging Authors
@@ -19,8 +19,11 @@ limitations under the License.
 package example
 
 import (
+	"fmt"
 	"github.com/n3wscott/rigging/pkg/installer"
+	"os"
 	"testing"
+	"text/template"
 
 	"knative.dev/pkg/test/logstream"
 )
@@ -32,9 +35,22 @@ func TestKoPublish(t *testing.T) {
 		t.Fatalf("failed to produce images, %s", err)
 	}
 
-	for k, v := range ic {
-		t.Log(k, "-->", v)
+	templateString := `
+	rigging.WithImages(map[string]string{
+		{{ range $key, $value := . }}"{{ $key }}": "{{ $value }}",{{ end }}
+	}),`
+
+	tp := template.New("t")
+	temp, err := tp.Parse(templateString)
+	if err != nil {
+		panic(err)
 	}
+
+	err = temp.Execute(os.Stdout, ic)
+	if err != nil {
+		panic(err)
+	}
+	_, _ = fmt.Fprint(os.Stdout, "\n\n")
 }
 
 // Rest of e2e tests go below:

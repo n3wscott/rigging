@@ -138,7 +138,7 @@ func waitForServiceAccountExists(client *Client, name, namespace string) error {
 }
 
 // WaitForResourceReady waits until the specified resource in the given namespace are ready.
-func (c *Client) WaitForResourceReady(namespace, name string, gvr schema.GroupVersionResource) error {
+func (c *Client) WaitForResourceReady(namespace, name string, gvr schema.GroupVersionResource, timeout time.Duration) error {
 	lastMsg := ""
 	like := &duckv1.KResource{}
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
@@ -173,12 +173,12 @@ func (c *Client) WaitForResourceReady(namespace, name string, gvr schema.GroupVe
 }
 
 // WaitForResourceReady waits until the specified resource in the given namespace are ready.
-func (c *Client) WaitUntilJobDone(name string) (string, error) {
+func (c *Client) WaitUntilJobDone(namespace, name string, timeout time.Duration) (string, error) {
 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-		job, err := c.Kube.Kube.BatchV1().Jobs(c.Namespace).Get(name, metav1.GetOptions{})
+		job, err := c.Kube.Kube.BatchV1().Jobs(namespace).Get(name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Println(c.Namespace, name, "not found", err)
+				log.Println(namespace, name, "not found", err)
 				// keep polling
 				return false, nil
 			}
@@ -192,10 +192,10 @@ func (c *Client) WaitUntilJobDone(name string) (string, error) {
 
 	// poll until the pod is terminated.
 	err = wait.PollImmediate(interval, timeout, func() (bool, error) {
-		pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, c.Namespace, name)
+		pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Println(c.Namespace, name, "not found", err)
+				log.Println(namespace, name, "not found", err)
 				// keep polling
 				return false, nil
 			}
@@ -214,7 +214,7 @@ func (c *Client) WaitUntilJobDone(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, c.Namespace, name)
+	pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
 	if err != nil {
 		return "", err
 	}

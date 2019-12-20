@@ -57,7 +57,7 @@ func ProduceImages() (map[string]string, error) {
 				return
 			}
 			i := strings.Split(pack, "/")
-			packageToImageConfig[i[len(i)-1]] = image
+			packageToImageConfig[i[len(i)-1]] = strings.TrimSpace(image)
 		}
 	})
 	return packageToImageConfig, propErr
