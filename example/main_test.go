@@ -20,11 +20,15 @@ package example
 
 import (
 	"fmt"
-	"github.com/n3wscott/rigging/pkg/installer"
 	"os"
 	"testing"
 	"text/template"
 
+	// Uncomment the following line to load the gcp plugin (only required to authenticate against GKE clusters).
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
+	//"github.com/google/go-cmp/cmp"
+	"github.com/n3wscott/rigging/pkg/installer"
 	"knative.dev/pkg/test/logstream"
 )
 
@@ -62,3 +66,31 @@ func TestEcho(t *testing.T) {
 
 	EchoTestImpl(t)
 }
+
+// TestBed is an example testbed test.
+func TestBed(t *testing.T) {
+	cancel := logstream.Start(t)
+	defer cancel()
+
+	BedTestImpl(t)
+}
+
+//func TestDiff(t *testing.T) {
+//	org := map[string]string{
+//		"foo": "bar",
+//		"baz": "baf",
+//	}
+//
+//	now := map[string]string{
+//		"foo": "bar",
+//		"baf": "baz",
+//		"baz": "boo",
+//	}
+//
+//	if diff := cmp.Diff(org, now); diff != "" {
+//		t.Log("FYI, diff on", diff)
+//	} else {
+//		t.Log("org or now are the same.")
+//	}
+//
+//}

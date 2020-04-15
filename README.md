@@ -13,6 +13,13 @@ testing should be as simple as running:
 go test ./example/... -tags e2e -v
 ```
 
+Or to just run `TestFoo`:
+
+```shell
+go test ./example/... -run TestFoo -tags e2e -v
+```
+
+
 # Rigging Architecture
 
 > Note: Rigging assumes the cluster is ready for testing. You can use rigging to setup dependent resources, but this should be limited

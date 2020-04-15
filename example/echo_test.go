@@ -18,6 +18,7 @@ package example
 
 import (
 	"encoding/json"
+	"github.com/google/go-cmp/cmp"
 	"github.com/n3wscott/rigging"
 	"github.com/n3wscott/rigging/pkg/runner"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -64,6 +65,21 @@ func EchoTestImpl(t *testing.T) {
 			out := &runner.Output{}
 
 			t.Log("Got message from resource:", msg)
+
+			org, _ := rig.ResourceOriginal(r)
+			now, _ := rig.ResourceNow(r)
+
+			if org != nil && now != nil {
+				if diff := cmp.Diff(org, now); diff != "" {
+					t.Log("FYI, diff on", r, diff)
+				} else {
+					t.Log("org or now are the same.")
+				}
+			} else {
+				t.Log("org or now are nil")
+				t.Logf("org: %v", org)
+				t.Logf("now: %v", now)
+			}
 
 			if err := json.Unmarshal([]byte(msg), out); err != nil {
 				t.Error(err)

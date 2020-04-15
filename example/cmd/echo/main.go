@@ -47,7 +47,7 @@ func (e *Echo) Do() error {
 	fmt.Printf("%s\n", e.Echo)
 
 	if err := e.WriteTerminationMessage(runner.Output{Success: true, Message: e.Echo}); err != nil {
-		fmt.Printf("failed to write termination message, %s.\n", err)
+		fmt.Printf("failed to write termination message, %v.\n", err)
 		return err
 	}
 
