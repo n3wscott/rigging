@@ -35,18 +35,19 @@ func BedTestImpl(t *testing.T) {
 	opts := []rigging.Option{}
 
 	rig, err := rigging.NewInstall(opts, []string{"testbed"}, map[string]string{"echo": "hello world"})
-	if err != nil {
-		t.Fatalf("failed to create rig, %s", err)
-	}
-
-	t.Logf("Created a new testing rig at namespace %s.", rig.Namespace())
 
 	// Uninstall deferred.
 	defer func() {
+		time.Sleep(time.Minute * 2)
 		if err := rig.Uninstall(); err != nil {
 			t.Errorf("failed to uninstall, %s", err)
 		}
 	}()
+
+	if err != nil {
+		t.Fatalf("failed to create rig, %s", err)
+	}
+	t.Logf("Created a new testing rig at namespace %s.", rig.Namespace())
 
 	refs := rig.Objects()
 	for _, r := range refs {

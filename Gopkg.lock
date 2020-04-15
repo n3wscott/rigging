@@ -307,6 +307,14 @@
   version = "v1.4.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:5c76c99992409ae67e1a09188f48f102efbcf4547d51691671782fa48ac3f84f"
+  name = "github.com/mattmoor/bindings"
+  packages = ["pkg/bindings"]
+  pruneopts = "NUT"
+  revision = "86473281beee15f57a0717611595c8272f15326c"
+
+[[projects]]
   digest = "1:5985ef4caf91ece5d54817c11ea25f182697534f8ae6521eadcd628c142ac4b6"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
@@ -1217,6 +1225,7 @@
   input-imports = [
     "github.com/google/go-cmp/cmp",
     "github.com/kelseyhightower/envconfig",
+    "github.com/mattmoor/bindings/pkg/bindings",
     "go.opencensus.io/metric/metricexport",
     "golang.org/x/net/http2/h2c",
     "k8s.io/api/batch/v1",

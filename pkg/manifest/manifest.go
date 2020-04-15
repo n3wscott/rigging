@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package manifestival
+package manifest
 
 import (
 	"fmt"
@@ -58,7 +58,7 @@ type YamlManifest struct {
 var _ Manifest = &YamlManifest{}
 
 func NewYamlManifest(pathname string, recursive bool, client dynamic.Interface) (Manifest, error) {
-	klog.Info("Reading YAML file", "name", pathname)
+	klog.Info("Reading YAML filepath: ", pathname, " recursive: ", recursive)
 	resources, err := Parse(pathname, recursive)
 	if err != nil {
 		return nil, err
