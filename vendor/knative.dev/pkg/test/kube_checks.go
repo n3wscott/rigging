@@ -25,8 +25,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8styped "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -49,7 +51,7 @@ func WaitForDeploymentState(client *KubeClient, name string, inState func(d *app
 	defer span.End()
 
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		d, err := d.Get(name, metav1.GetOptions{})
+		d, err := d.Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			return true, err
 		}
@@ -67,7 +69,7 @@ func WaitForPodListState(client *KubeClient, inState func(p *corev1.PodList) (bo
 	defer span.End()
 
 	return wait.PollImmediate(interval, podTimeout, func() (bool, error) {
-		p, err := p.List(metav1.ListOptions{})
+		p, err := p.List(context.Background(), metav1.ListOptions{})
 		if err != nil {
 			return true, err
 		}
@@ -85,12 +87,25 @@ func WaitForPodState(client *KubeClient, inState func(p *corev1.Pod) (bool, erro
 	defer span.End()
 
 	return wait.PollImmediate(interval, podTimeout, func() (bool, error) {
-		p, err := p.Get(name, metav1.GetOptions{})
+		p, err := p.Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 		return inState(p)
 	})
+}
+
+// WaitForPodDeleted waits for the given pod to disappear from the given namespace.
+func WaitForPodDeleted(client *KubeClient, name, namespace string) error {
+	if err := WaitForPodState(client, func(p *corev1.Pod) (bool, error) {
+		// Always return false. We're oly interested in the error which indicates pod deletion or timeout.
+		return false, nil
+	}, name, namespace); err != nil {
+		if !apierrs.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // WaitForServiceHasAtLeastOneEndpoint polls the status of the specified Service
@@ -101,7 +116,7 @@ func WaitForServiceEndpoints(client *KubeClient, svcName string, svcNamespace st
 	defer span.End()
 
 	return wait.PollImmediate(interval, podTimeout, func() (bool, error) {
-		endpoint, err := endpointsService.Get(svcName, metav1.GetOptions{})
+		endpoint, err := endpointsService.Get(context.Background(), svcName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -119,6 +134,29 @@ func countEndpointsNum(e *corev1.Endpoints) int {
 		num += len(sub.Addresses)
 	}
 	return num
+}
+
+// GetEndpointAddresses returns addresses of endpoints for the given service.
+func GetEndpointAddresses(client *KubeClient, svcName, svcNamespace string) ([]string, error) {
+	endpoints, err := client.Kube.CoreV1().Endpoints(svcNamespace).Get(context.Background(), svcName, metav1.GetOptions{})
+	if err != nil || countEndpointsNum(endpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints or error: %w", err)
+	}
+	var hosts []string
+	for _, sub := range endpoints.Subsets {
+		for _, addr := range sub.Addresses {
+			hosts = append(hosts, addr.IP)
+		}
+	}
+	return hosts, nil
+}
+
+// WaitForChangedEndpoints waits until the endpoints for the given service differ from origEndpoints.
+func WaitForChangedEndpoints(client *KubeClient, svcName, svcNamespace string, origEndpoints []string) error {
+	return wait.PollImmediate(1*time.Second, 2*time.Minute, func() (bool, error) {
+		newEndpoints, err := GetEndpointAddresses(client, svcName, svcNamespace)
+		return !cmp.Equal(origEndpoints, newEndpoints), err
+	})
 }
 
 // GetConfigMap gets the configmaps for a given namespace
@@ -147,32 +185,47 @@ func WaitForLogContent(client *KubeClient, podName, containerName, namespace, co
 
 // WaitForAllPodsRunning waits for all the pods to be in running state
 func WaitForAllPodsRunning(client *KubeClient, namespace string) error {
-	return WaitForPodListState(client, PodsRunning, "PodsAreRunning", namespace)
+	return WaitForPodListState(client, podsRunning, "PodsAreRunning", namespace)
 }
 
 // WaitForPodRunning waits for the given pod to be in running state
 func WaitForPodRunning(client *KubeClient, name string, namespace string) error {
 	p := client.Kube.CoreV1().Pods(namespace)
 	return wait.PollImmediate(interval, podTimeout, func() (bool, error) {
-		p, err := p.Get(name, metav1.GetOptions{})
+		p, err := p.Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			return true, err
 		}
-		return PodRunning(p), nil
+		return podRunning(p), nil
 	})
 }
 
-// PodsRunning will check the status conditions of the pod list and return true all pods are Running
-func PodsRunning(podList *corev1.PodList) (bool, error) {
-	for _, pod := range podList.Items {
-		if isRunning := PodRunning(&pod); !isRunning {
+// podsRunning will check the status conditions of the pod list and return true all pods are Running
+func podsRunning(podList *corev1.PodList) (bool, error) {
+	// Pods are big, so use indexing, to avoid copying.
+	for i := range podList.Items {
+		if isRunning := podRunning(&podList.Items[i]); !isRunning {
 			return false, nil
 		}
 	}
 	return true, nil
 }
 
-// PodRunning will check the status conditions of the pod and return true if it's Running
-func PodRunning(pod *corev1.Pod) bool {
+// podRunning will check the status conditions of the pod and return true if it's Running.
+func podRunning(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodSucceeded
+}
+
+// WaitForDeploymentScale waits until the given deployment has the expected scale.
+func WaitForDeploymentScale(client *KubeClient, name, namespace string, scale int) error {
+	return WaitForDeploymentState(
+		client,
+		name,
+		func(d *appsv1.Deployment) (bool, error) {
+			return d.Status.ReadyReplicas == int32(scale), nil
+		},
+		"DeploymentIsScaled",
+		namespace,
+		time.Minute,
+	)
 }
