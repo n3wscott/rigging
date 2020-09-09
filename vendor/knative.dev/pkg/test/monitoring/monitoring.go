@@ -17,6 +17,7 @@ limitations under the License.
 package monitoring
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -44,7 +45,7 @@ func CheckPortAvailability(port int) error {
 // GetPods retrieves the current existing podlist for the app in monitoring namespace
 // This uses app=<app> as labelselector for selecting pods
 func GetPods(kubeClientset *kubernetes.Clientset, app, namespace string) (*v1.PodList, error) {
-	pods, err := kubeClientset.CoreV1().Pods(namespace).List(metav1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", app)})
+	pods, err := kubeClientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: fmt.Sprintf("app=%s", app)})
 	if err == nil && len(pods.Items) == 0 {
 		err = fmt.Errorf("no %s Pod found on the cluster. Ensure monitoring is switched on for your Knative Setup", app)
 	}
@@ -65,7 +66,7 @@ func PortForward(logf logging.FormatLogger, podList *v1.PodList, localPort, remo
 	portFwdProcess, err := executeCmdBackground(logf, portFwdCmd)
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to port forward: %v", err)
+		return 0, fmt.Errorf("failed to port forward: %w", err)
 	}
 
 	logf("running %s port-forward in background, pid = %d", podName, portFwdProcess.Pid)
@@ -79,7 +80,7 @@ func executeCmdBackground(logf logging.FormatLogger, format string, args ...inte
 	parts := strings.Split(cmd, " ")
 	c := exec.Command(parts[0], parts[1:]...) // #nosec
 	if err := c.Start(); err != nil {
-		return nil, fmt.Errorf("%s command failed: %v", cmd, err)
+		return nil, fmt.Errorf("%s command failed: %w", cmd, err)
 	}
 	return c.Process, nil
 }

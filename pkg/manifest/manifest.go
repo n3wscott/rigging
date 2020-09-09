@@ -17,6 +17,7 @@ limitations under the License.
 package manifest
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -83,7 +84,7 @@ func (f *YamlManifest) Apply(spec *unstructured.Unstructured) error {
 	if current == nil {
 		klog.Info("Creating", "type", spec.GroupVersionKind(), "name", spec.GetName())
 		gvr, _ := meta.UnsafeGuessKindToResource(spec.GroupVersionKind())
-		if _, err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Create(spec, v1.CreateOptions{}); err != nil {
+		if _, err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Create(context.Background(), spec, v1.CreateOptions{}); err != nil {
 			return err
 		}
 	} else {
@@ -92,7 +93,7 @@ func (f *YamlManifest) Apply(spec *unstructured.Unstructured) error {
 			klog.Info("Updating", "type", spec.GroupVersionKind(), "name", spec.GetName())
 
 			gvr, _ := meta.UnsafeGuessKindToResource(spec.GroupVersionKind())
-			if _, err = f.client.Resource(gvr).Namespace(current.GetNamespace()).Update(current, v1.UpdateOptions{}); err != nil {
+			if _, err = f.client.Resource(gvr).Namespace(current.GetNamespace()).Update(context.Background(), current, v1.UpdateOptions{}); err != nil {
 				return err
 			}
 		}
@@ -122,7 +123,7 @@ func (f *YamlManifest) Delete(spec *unstructured.Unstructured) error {
 	}
 	klog.Info("Deleting ", "type ", spec.GroupVersionKind(), "name ", spec.GetName())
 	gvr, _ := meta.UnsafeGuessKindToResource(spec.GroupVersionKind())
-	if err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Delete(spec.GetName(), &v1.DeleteOptions{}); err != nil {
+	if err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Delete(context.Background(), spec.GetName(), v1.DeleteOptions{}); err != nil {
 		// ignore GC race conditions triggered by owner references
 		if !errors.IsNotFound(err) {
 			return err
@@ -133,7 +134,7 @@ func (f *YamlManifest) Delete(spec *unstructured.Unstructured) error {
 
 func (f *YamlManifest) Get(spec *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	gvr, _ := meta.UnsafeGuessKindToResource(spec.GroupVersionKind())
-	result, err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Get(spec.GetName(), v1.GetOptions{})
+	result, err := f.client.Resource(gvr).Namespace(spec.GetNamespace()).Get(context.Background(), spec.GetName(), v1.GetOptions{})
 	if err != nil {
 		result = nil
 		if errors.IsNotFound(err) {
