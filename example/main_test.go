@@ -27,10 +27,22 @@ import (
 	// Uncomment the following line to load the gcp plugin (only required to authenticate against GKE clusters).
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
-	//"github.com/google/go-cmp/cmp"
 	"github.com/n3wscott/rigging/pkg/installer"
-	"knative.dev/pkg/test/logstream"
+	"github.com/n3wscott/rigging/pkg/lifecycle"
+	"knative.dev/pkg/injection/sharedmain"
+	_ "knative.dev/pkg/system/testing"
 )
+
+func TestMain(m *testing.M) {
+
+	fmt.Println("TestMain")
+
+	ctx := sharedmain.EnableInjectionOrDie(nil, nil)
+
+	lifecycle.InjectClients(ctx)
+
+	os.Exit(m.Run())
+}
 
 // This test is more for debugging the ko publish process.
 func TestKoPublish(t *testing.T) {
@@ -61,17 +73,11 @@ func TestKoPublish(t *testing.T) {
 
 // TestEcho is an example simple test.
 func TestEcho(t *testing.T) {
-	cancel := logstream.Start(t)
-	defer cancel()
-
 	EchoTestImpl(t)
 }
 
 // TestBed is an example testbed test.
 func TestBed(t *testing.T) {
-	cancel := logstream.Start(t)
-	defer cancel()
-
 	BedTestImpl(t)
 }
 
