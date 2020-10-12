@@ -9,7 +9,7 @@ require (
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v11.0.1-0.20190805182717-6502b5e7b1b5+incompatible
 	k8s.io/klog v1.0.0
-	knative.dev/pkg v0.0.0-20201012033616-18350095f500
+	knative.dev/pkg v0.0.0-20201012163217-54ad6c6d39a7
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.18.8

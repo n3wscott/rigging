@@ -78,6 +78,7 @@ func TestEcho(t *testing.T) {
 
 // TestBed is an example testbed test.
 func TestBed(t *testing.T) {
+	t.Skip("test bed not implemented.")
 	BedTestImpl(t)
 }
 
