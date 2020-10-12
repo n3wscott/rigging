@@ -3,12 +3,13 @@ package rigging
 import (
 	"errors"
 	"fmt"
-	"github.com/n3wscott/rigging/pkg/namers"
 	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/n3wscott/rigging/pkg/namers"
 
 	"github.com/n3wscott/rigging/pkg/installer"
 	"github.com/n3wscott/rigging/pkg/lifecycle"

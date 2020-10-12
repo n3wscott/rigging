@@ -29,7 +29,7 @@ import (
 
 	"github.com/n3wscott/rigging/pkg/installer"
 	"github.com/n3wscott/rigging/pkg/lifecycle"
-	"knative.dev/pkg/injection/sharedmain"
+	"knative.dev/pkg/injection"
 	_ "knative.dev/pkg/system/testing"
 )
 
@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("TestMain")
 
-	ctx := sharedmain.EnableInjectionOrDie(nil, nil)
+	ctx, _ := injection.EnableInjectionOrDie(nil, nil)
 
 	lifecycle.InjectClients(ctx)
 

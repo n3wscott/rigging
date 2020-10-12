@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 
+	"knative.dev/pkg/injection"
+
 	"github.com/n3wscott/rigging/pkg/testbed"
-	"knative.dev/pkg/injection/sharedmain"
 )
 
 func main() {
-	ctx := sharedmain.EnableInjectionOrDie(nil, nil)
+	ctx, _ := injection.EnableInjectionOrDie(nil, nil)
 
 	// Start the testbed.
 	tb := testbed.New(ctx)
