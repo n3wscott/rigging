@@ -31,41 +31,42 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
-	kntest "knative.dev/pkg/test"
+	kubeclient "knative.dev/pkg/client/injection/kube/client"
+	"knative.dev/pkg/injection/clients/dynamicclient"
 )
 
 // Client holds instances of interfaces for making requests to Kubernetes.
 type Client struct {
-	Kube             *kntest.KubeClient
+	Kube             kubernetes.Interface
 	Dynamic          dynamic.Interface
 	Namespace        string
 	namespaceCreated bool
 }
 
+var (
+	onceKube    kubernetes.Interface
+	onceDynamic dynamic.Interface
+)
+
+func InjectClients(ctx context.Context) {
+	onceKube = kubeclient.Get(ctx)
+	onceDynamic = dynamicclient.Get(ctx)
+}
+
 // NewClient instantiates and returns clientsets required for making request to the
 // cluster specified by the combination of clusterName and configPath.
-func NewClient(configPath string, clusterName string, namespace string) (*Client, error) {
-	client := &Client{}
-	cfg, err := kntest.BuildClientConfig(configPath, clusterName)
-	if err != nil {
-		return nil, err
-	}
-	client.Kube, err = kntest.NewKubeClient(configPath, clusterName)
-	if err != nil {
-		return nil, err
+func NewClient(namespace string) (*Client, error) {
+	c := &Client{
+		Kube:      onceKube, // InjectClients needs to be called with the injection context
+		Dynamic:   onceDynamic,
+		Namespace: namespace,
 	}
 
-	client.Dynamic, err = dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	client.Namespace = namespace
-	client.namespaceCreated = true
-	return client, nil
+	return c, nil
 }
 
 // CreateNamespaceIfNeeded creates a new namespace if it does not exist.
@@ -79,6 +80,7 @@ func (c *Client) CreateNamespaceIfNeeded() error {
 		if err != nil {
 			return fmt.Errorf("Failed to create Namespace: %s; %v", c.Namespace, err)
 		}
+		c.namespaceCreated = true
 
 		// https://github.com/kubernetes/kubernetes/issues/66689
 		// We can only start creating pods after the default ServiceAccount is created by the kube-controller-manager.
