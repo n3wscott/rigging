@@ -70,11 +70,11 @@ func NewClient(configPath string, clusterName string, namespace string) (*Client
 
 // CreateNamespaceIfNeeded creates a new namespace if it does not exist.
 func (c *Client) CreateNamespaceIfNeeded() error {
-	nsSpec, err := c.Kube.Kube.CoreV1().Namespaces().Get(context.Background(), c.Namespace, metav1.GetOptions{})
+	nsSpec, err := c.Kube.CoreV1().Namespaces().Get(context.Background(), c.Namespace, metav1.GetOptions{})
 
 	if err != nil && apierrors.IsNotFound(err) {
 		nsSpec = &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: c.Namespace}}
-		nsSpec, err = c.Kube.Kube.CoreV1().Namespaces().Create(context.Background(), nsSpec, metav1.CreateOptions{})
+		nsSpec, err = c.Kube.CoreV1().Namespaces().Create(context.Background(), nsSpec, metav1.CreateOptions{})
 
 		if err != nil {
 			return fmt.Errorf("Failed to create Namespace: %s; %v", c.Namespace, err)
@@ -92,9 +92,9 @@ func (c *Client) CreateNamespaceIfNeeded() error {
 
 func (c *Client) DeleteNamespaceIfNeeded() error {
 	if c.namespaceCreated {
-		_, err := c.Kube.Kube.CoreV1().Namespaces().Get(context.Background(), c.Namespace, metav1.GetOptions{})
+		_, err := c.Kube.CoreV1().Namespaces().Get(context.Background(), c.Namespace, metav1.GetOptions{})
 		if err == nil || !apierrors.IsNotFound(err) {
-			return c.Kube.Kube.CoreV1().Namespaces().Delete(context.Background(), c.Namespace, metav1.DeleteOptions{})
+			return c.Kube.CoreV1().Namespaces().Delete(context.Background(), c.Namespace, metav1.DeleteOptions{})
 		}
 		return err
 	}
@@ -103,7 +103,7 @@ func (c *Client) DeleteNamespaceIfNeeded() error {
 
 // DuplicateSecret duplicates a secret from a namespace to a new namespace.
 func (c *Client) DuplicateSecret(t *testing.T, name, namespace string) {
-	secret, err := c.Kube.Kube.CoreV1().Secrets(namespace).Get(context.Background(), name, metav1.GetOptions{})
+	secret, err := c.Kube.CoreV1().Secrets(namespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to find Secret: %q in Namespace: %q: %s", name, namespace, err)
 		return
@@ -114,7 +114,7 @@ func (c *Client) DuplicateSecret(t *testing.T, name, namespace string) {
 	newSecret.Data = secret.Data
 	newSecret.StringData = secret.StringData
 	newSecret.Type = secret.Type
-	newSecret, err = c.Kube.Kube.CoreV1().Secrets(c.Namespace).Create(context.Background(), newSecret, metav1.CreateOptions{})
+	newSecret, err = c.Kube.CoreV1().Secrets(c.Namespace).Create(context.Background(), newSecret, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Secret: %s; %v", c.Namespace, err)
 	}
@@ -129,7 +129,7 @@ const (
 // waitForServiceAccountExists waits until the ServiceAccount exists.
 func waitForServiceAccountExists(client *Client, name, namespace string) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		sas := client.Kube.Kube.CoreV1().ServiceAccounts(namespace)
+		sas := client.Kube.CoreV1().ServiceAccounts(namespace)
 		if _, err := sas.Get(context.Background(), name, metav1.GetOptions{}); err == nil {
 			return true, nil
 		}
@@ -175,7 +175,7 @@ func (c *Client) WaitForResourceReady(namespace, name string, gvr schema.GroupVe
 // WaitForResourceReady waits until the specified resource in the given namespace are ready.
 func (c *Client) WaitUntilJobDone(namespace, name string, timeout time.Duration) (string, error) {
 	err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-		job, err := c.Kube.Kube.BatchV1().Jobs(namespace).Get(context.Background(), name, metav1.GetOptions{})
+		job, err := c.Kube.BatchV1().Jobs(namespace).Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Println(namespace, name, "not found", err)
@@ -192,7 +192,7 @@ func (c *Client) WaitUntilJobDone(namespace, name string, timeout time.Duration)
 
 	// poll until the pod is terminated.
 	err = wait.PollImmediate(interval, timeout, func() (bool, error) {
-		pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
+		pod, err := GetJobPodByJobName(context.TODO(), c.Kube, namespace, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				log.Println(namespace, name, "not found", err)
@@ -214,7 +214,7 @@ func (c *Client) WaitUntilJobDone(namespace, name string, timeout time.Duration)
 	if err != nil {
 		return "", err
 	}
-	pod, err := GetJobPodByJobName(context.TODO(), c.Kube.Kube, namespace, name)
+	pod, err := GetJobPodByJobName(context.TODO(), c.Kube, namespace, name)
 	if err != nil {
 		return "", err
 	}
@@ -223,7 +223,7 @@ func (c *Client) WaitUntilJobDone(namespace, name string, timeout time.Duration)
 
 func (c *Client) LogsFor(namespace, name string, gvr schema.GroupVersionResource) (string, error) {
 	// Get all pods in this namespace.
-	pods, err := c.Kube.Kube.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
+	pods, err := c.Kube.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -234,7 +234,7 @@ func (c *Client) LogsFor(namespace, name string, gvr schema.GroupVersionResource
 	for _, pod := range pods.Items {
 		if strings.Contains(pod.Name, name) {
 			// Collect all the logs from all the containers for this pod.
-			if l, err := c.Kube.Kube.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{}).DoRaw(context.Background()); err != nil {
+			if l, err := c.Kube.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{}).DoRaw(context.Background()); err != nil {
 				logs = append(logs, err.Error())
 			} else {
 				logs = append(logs, string(l))
